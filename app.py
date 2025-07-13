@@ -1,6 +1,5 @@
-
 import streamlit as st
-import openai
+from openai import OpenAI
 import os
 import json
 import numpy as np
@@ -9,12 +8,12 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 import nltk
 
 nltk.download("vader_lexicon")
+#################################################################################################################################################
 
-# 
 EMBEDDINGS_DIR = "embeddings_folder"
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-
+# embeddings JSON 
 @st.cache_data
 def load_all_embeddings(directory):
     all_chunks = []
@@ -31,10 +30,11 @@ def load_all_embeddings(directory):
 
 all_chunks = load_all_embeddings(EMBEDDINGS_DIR)
 
+
 def get_embedding(text):
-    response = openai.embeddings.create(
+    response = client.embeddings.create(
         input=text,
-        model="text-embedding-ada-002"
+        model="text-embedding-3-small"
     )
     return response.data[0].embedding
 
@@ -44,7 +44,7 @@ def search_chunks(question, top_k=15):
     chunk_embeddings = [chunk["embedding"] for chunk in all_chunks if "embedding" in chunk]
     similarities = cosine_similarity([question_emb], chunk_embeddings)[0]
     ranked = sorted(zip(similarities, all_chunks), key=lambda x: x[0], reverse=True)
-    top_chunks = [entry[1]["text"] for entry in ranked[:top_k]]
+    top_chunks = [entry[1]["text"] for entry in ranked[:top_k] if "text" in entry[1]]
     return "\n\n".join(top_chunks)
 
 
@@ -61,13 +61,13 @@ def detect_tone(text):
 
 def generate_response(question, context, tone):
     system_msg = (
-        "You are Tammy, an empathetic and strategic AI mentor for business. "
+        "You are Tammy, an empathetic and strategic AI mentor. "
         "You help users gain clarity, confidence, and momentum."
     )
 
     tone_prefix = {
-        "positive": "Great energy! Let's build on that ",
-        "negative": "Thanks for trusting me. I'm here with you. ",
+        "positive": "Great energy! Let's build on that",
+        "negative": "Thanks for trusting me. I'm here with you.",
         "neutral": "Let's tackle this together step by step."
     }
 
@@ -77,17 +77,18 @@ def generate_response(question, context, tone):
         {"role": "user", "content": f"{tone_prefix[tone]}\n\nQuestion: {question}"}
     ]
 
-    response = openai.chat.completions.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=messages,
         temperature=0.4
     )
     return response.choices[0].message.content
 
-
-st.title(" Tammy – Your Business Mentor")
+# Streamlit
+st.title("Tammy – Your AI Mentor")
 st.markdown("Welcome to your strategic clarity hub. Ask Tammy anything about business, mindset, or growth.")
-question = st.text_input(" Enter your question for Tammy:")
+
+question = st.text_input("Enter your question for Tammy:")
 
 if st.button("Ask Tammy"):
     if question.strip() == "":
@@ -97,5 +98,5 @@ if st.button("Ask Tammy"):
             tone = detect_tone(question)
             context = search_chunks(question)
             answer = generate_response(question, context, tone)
-        st.success(" Tammy's Response:")
+        st.success("Tammy's Response:")
         st.write(answer)
